@@ -1,71 +1,42 @@
 import requests
 import urllib
 from http import HTTPStatus
-import pdfkit
+import headless_pdfkit
+import base64
+import redis
 
 from config.config import Config
 
 cfg = Config.instance()
 
-def initialize_config():
-    print(Config.get_base_url())
 
+class RedisManager:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.connect()
 
-def generate_author_info_pdf(author_info, output_path='author_info.pdf'):
-    # HTML template for the PDF
-    html_template = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                padding: 20px;
-            }}
-            h1, h2, h3 {{
-                color: #333;
-            }}
-            .articles-list {{
-                list-style-type: none;
-                padding: 0;
-            }}
-            .article {{
-                margin-bottom: 10px;
-            }}
-        </style>
-    </head>
-    <body>
-        <h1>{author_info['name']}</h1>
-        <div>
-        <h2> Summary Statistics </h2>
-        <li> <b> H-Index </b> : {author_info['statistics'].hindex} </li>
-        <li> <b> Total Citations </b> : {author_info['statistics'].citations} </li>
-        <li> <b> Relevance score </b> : {author_info['statistics'].relevance_score} </li>
-        </div>
-        <div>
-           <h2>Institutions</h2>
-            <div>
-                <ul class="articles-list">
-                    {"".join(f'<li class="article"> {institution.get_intervals_format()} {institution.name} </li>' for institution in author_info['institutions'])}
-                </ul>
-            </div>
-            <div>
-            <h2>Articles</h2>
-                <ul class="articles-list">
-                    {"".join(f'<li class="article">  {article.year} <a href="{article.url}">{article.title}</a></li>' for article in author_info['articles'])}
-                </ul>
-            </div>
-        </div>
+    def connect(self):
+        r = redis.Redis(self.host, self.port)
+        self.r = r
 
+    def retrive(self, name):
+        if self.r == None:
+            return None
         
-    </body>
-    </html>
-    """
+        val = self.r.get(name)
+        return val
+    
+    def insert_if_not_exists(self, key, val):
+        if not self.r.exists(key):
+            self.r.set(key, val)
 
-    # Convert HTML to PDF
-    pdfkit.from_string(html_template, output_path)
 
+class Statistics:
+    def __init__(self, hindex, citations, relevance_score):
+        self.hindex = hindex
+        self.citations = citations
+        self.relevance_score = relevance_score
 
 class Article:
    def __init__(self, name, year, url):
@@ -103,111 +74,246 @@ class Institution:
     def get_intervals_format(self):
         years_intervals = self.get_intervals()
         return ", ".join(map(lambda x: f"{x[0]} - {x[1]}" if x[0] != x[1] else f"{x[0]}", years_intervals))
-            
 
-def get_articles_from_author(base_url):
+class PDFGenerator:
+    def __init__(self):
+        pass
 
-    count = 0
-    page = 1
-    url = base_url
+    def get_statistics(self, data):
+        return Statistics(data["summary_stats"]["h_index"], data["cited_by_count"], float(data["relevance_score"]))
 
-    articles = []
-    while True:
-        response = requests.get(url)
-        if response.status_code != HTTPStatus.OK:
-            return
-        
-        response_json = response.json()
-
-        for item in response_json["results"]:
-            if item["type"] == "article":
-                title = item["title"]
-                publication_year = item["publication_year"]
-                if item["doi"]:
-                    url = item["doi"]
-                elif item["primary_location"] and item["primary_location"]["landing_page_url"]:
-                    url = item["primary_location"]["landing_page_url"]
-                else:
-                    url = None
-
-                articles.append(Article(title, publication_year, url))
-        
-        count += len(response_json["results"])
-        if count == response_json["meta"]["count"]:
-            break
-        page += 1
-     
-        url = f"{base_url}&page={page}"
+    def get_institutions_from_author(self, data):
+        institutions = []
+        for item in data:
+                institutions.append(Institution(item["institution"]["display_name"], item["years"], "RO"))
+        return institutions
     
+    def get_articles_from_author(self, base_url):
+        count = 0
+        page = 1
+        url = base_url
 
-    return articles
+        articles = []
+        while True:
+            response = requests.get(url)
+            if response.status_code != HTTPStatus.OK:
+                return
+            
+            response_json = response.json()
 
-class Statistics:
-    def __init__(self, hindex, citations, relevance_score):
-        self.hindex = hindex
-        self.citations = citations
-        self.relevance_score = relevance_score
+            for item in response_json["results"]:
+                if item["type"] == "article":
+                    title = item["title"]
+                    publication_year = item["publication_year"]
+                    if item["doi"]:
+                        url = item["doi"]
+                    elif item["primary_location"] and item["primary_location"]["landing_page_url"]:
+                        url = item["primary_location"]["landing_page_url"]
+                    else:
+                        url = None
 
-
-def get_statistics(data):
-    return Statistics(data["summary_stats"]["h_index"], data["cited_by_count"], float(data["relevance_score"]))
-
-def get_institutions_from_author(data):
-    institutions = []
-    for item in data:
-            institutions.append(Institution(item["institution"]["display_name"], item["years"], "RO"))
-    return institutions
-
-def search_author(author_name):
-    author_encoded = urllib.parse.quote(author_name)
-    baseUrl = f"https://api.openalex.org/authors?filter=display_name.search:{author_encoded}"
-    response = requests.get(baseUrl)
-    if response.status_code == HTTPStatus.OK:
-        response_json = response.json()
-        metadata = response_json["meta"]
-
-        if metadata["count"] < 1:
-            return
+                    articles.append(Article(title, publication_year, url))
+            
+            count += len(response_json["results"])
+            if count == response_json["meta"]["count"]:
+                break
+            page += 1
         
-        result = response_json["results"][0]
-        author_name = result["display_name"]
+            url = f"{base_url}&page={page}"
+        
 
-        articles = get_articles_from_author(result["works_api_url"])
+        return articles
+    
+    def search_author(self, author_name):
+        author_encoded = urllib.parse.quote(author_name)
+        baseUrl = f"https://api.openalex.org/authors?filter=display_name.search:{author_encoded}"
+        response = requests.get(baseUrl)
+        if response.status_code == HTTPStatus.OK:
+            response_json = response.json()
+            metadata = response_json["meta"]
 
-        institutions = get_institutions_from_author(result["affiliations"])    
+            if metadata["count"] < 1:
+                return
+            
+            result = response_json["results"][0]
+            author_name = result["display_name"]
 
-        article_set = []
-        article_names = set()
-        for article in articles:
-            title_formated = ""
-            for letter in article.title:
-                if (letter >= 'a' and letter <= 'z') or (letter >= 'A' and letter <= 'Z') or (letter >= '0' and letter <= '9'):
-                    title_formated += letter 
-            title_formated = title_formated.upper().replace(" ", "")
-            if title_formated in article_names:
-                continue
-            article_names.add(title_formated)
-            article_set.append(article)
+            articles = self.get_articles_from_author(result["works_api_url"])
 
-        articles = article_set
-        articles.sort(key= lambda article : article.year, reverse=True)
+            institutions = self.get_institutions_from_author(result["affiliations"])    
 
-        statistics = get_statistics(result)
+            article_set = []
+            article_names = set()
+            for article in articles:
+                title_formated = ""
+                for letter in article.title:
+                    if (letter >= 'a' and letter <= 'z') or (letter >= 'A' and letter <= 'Z') or (letter >= '0' and letter <= '9'):
+                        title_formated += letter 
+                title_formated = title_formated.upper().replace(" ", "")
+                if title_formated in article_names:
+                    continue
+                article_names.add(title_formated)
+                article_set.append(article)
 
-        author_information = {
-            'name': author_name,
-            'institutions': institutions,
-            'articles': articles,
-            'statistics': statistics,
-        }
+            articles = article_set
+            articles.sort(key= lambda article : article.year, reverse=True)
 
-        # Generate PDF with author information
-        generate_author_info_pdf(author_information)
+            statistics = self.get_statistics(result)
 
+            author_information = {
+                'name': author_name,
+                'institutions': institutions,
+                'articles': articles,
+                'statistics': statistics,
+            }
+
+            # Generate PDF with author information
+            self.generate_author_info_pdf(author_information)
+
+    def generate_author_info_pdf(self, author_info, output_path='author_info.pdf'):
+        # HTML template for the PDF
+        html_template = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    padding: 20px;
+                }}
+                h1, h2, h3 {{
+                    color: #333;
+                }}
+                .articles-list {{
+                    list-style-type: none;
+                    paddin)g: 0;
+                }}
+                .article {{
+                    margin-bottom: 10px;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>{author_info['name']}</h1>
+            <div>
+            <h2> Summary Statistics </h2>
+            <li> <b> H-Index </b> : {author_info['statistics'].hindex} </li>
+            <li> <b> Total Citations </b> : {author_info['statistics'].citations} </li>
+            <li> <b> Relevance score </b> : {author_info['statistics'].relevance_score} </li>
+            </div>
+            <div>
+            <h2>Institutions</h2>
+                <div>
+                    <ul class="articles-list">
+                        {"".join(f'<li class="article"> {institution.get_intervals_format()} {institution.name} </li>' for institution in author_info['institutions'])}
+                    </ul>
+                </div>
+                <div>
+                <h2>Articles</h2>
+                    <ul class="articles-list">
+                        {"".join(f'<li class="article">  {article.year} <a href="{article.url}">{article.title}</a></li>' for article in author_info['articles'])}
+                    </ul>
+                </div>
+            </div>
+
+            
+        </body>
+        </html>
+        """
+
+        # Convert HTML to PDF
+        res = headless_pdfkit.generate_pdf(html_template)
+
+        # with open(output_path, 'wb') as w:
+        #     w.write(res)
+        return res
+
+    def generate_pdf(self, author_name):
+        author_encoded = urllib.parse.quote(author_name)
+        baseUrl = f"https://api.openalex.org/authors?filter=display_name.search:{author_encoded}"
+        response = requests.get(baseUrl)
+        if response.status_code == HTTPStatus.OK:
+            response_json = response.json()
+            metadata = response_json["meta"]
+
+            if metadata["count"] < 1:
+                return
+            
+            result = response_json["results"][0]
+            author_name = result["display_name"]
+
+            articles = self.get_articles_from_author(result["works_api_url"])
+
+            institutions = self.get_institutions_from_author(result["affiliations"])    
+
+            article_set = []
+            article_names = set()
+            for article in articles:
+                title_formated = ""
+                for letter in article.title:
+                    if (letter >= 'a' and letter <= 'z') or (letter >= 'A' and letter <= 'Z') or (letter >= '0' and letter <= '9'):
+                        title_formated += letter 
+                title_formated = title_formated.upper().replace(" ", "")
+                if title_formated in article_names:
+                    continue
+                article_names.add(title_formated)
+                article_set.append(article)
+
+            articles = article_set
+            articles.sort(key= lambda article : article.year, reverse=True)
+
+            statistics = self.get_statistics(result)
+
+            author_information = {
+                'name': author_name,
+                'institutions': institutions,
+                'articles': articles,
+                'statistics': statistics,
+            }
+
+            # Generate PDF with author information
+            res = self.generate_author_info_pdf(author_information)
+            return res
+
+
+class Writer:
+    def __init__(self):
+        pass
+
+    def write(filename : str, bytes : bytearray) :
+        with open(filename, 'wb') as w:
+            w.write(bytes)
+
+class WebscrapperManager:
+    def __init__(self):
+        self.redis_manager = RedisManager("localhost", 6379)
+        self.pdf_generator = PDFGenerator()
+
+    def retrieve_request(self, name):
+        value = self.redis_manager.retrive(name)
+        if value == None:
+            bytes = self.pdf_generator.generate_pdf(author_name=name)
+            if bytes == None:
+                print("Could not generate pdf")
+                return
+            encoded = base64.b64encode(bytes)
+
+            self.redis_manager.insert_if_not_exists(name, encoded)
+        else:
+            print("cached")
+            bytes = base64.b64decode(value)
+
+        Writer.write("author_info.pdf", bytes)
+           
+
+def initialize_config():
+    print(Config.get_base_url())
 
 def main():
     initialize_config()
-    search_author("adina florea")
+    webManager = WebscrapperManager()
+    webManager.retrieve_request("catalin gosman")
 
 if __name__ == "__main__":
     main()

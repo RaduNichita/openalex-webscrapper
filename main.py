@@ -7,8 +7,10 @@ import redis
 
 from config.config import Config
 
-cfg = Config.instance()
+from flask import Flask, make_response
 
+app = Flask(__name__)
+cfg = Config.instance()
 
 class RedisManager:
     def __init__(self, host, port):
@@ -304,16 +306,25 @@ class WebscrapperManager:
             print("cached")
             bytes = base64.b64decode(value)
 
-        Writer.write("author_info.pdf", bytes)
+        return bytes
            
 
 def initialize_config():
     print(Config.get_base_url())
 
-def main():
-    initialize_config()
-    webManager = WebscrapperManager()
-    webManager.retrieve_request("catalin gosman")
+# def main():
+#     initialize_config()
+
+webManager = WebscrapperManager()
+@app.route("/report.pdf")
+def get_pdf():
+    bytes_pdf = webManager.retrieve_request("catalin gosman")
+    
+    response = make_response(bytes_pdf)
+    response.headers.set('Content-Type', 'application/pdf')
+    response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
+    return response
 
 if __name__ == "__main__":
-    main()
+    app.run(host="0.0.0.0", port=5000)
+    # main()

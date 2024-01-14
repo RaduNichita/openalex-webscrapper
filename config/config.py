@@ -34,8 +34,15 @@ class Config:
         if 'OPENALEX_API_URL' in json_data:
             self.base_url = json_data["OPENALEX_API_URL"]
 
+        self.use_redis = 'USE_REDIS' in json_data and json_data["USE_REDIS"]
+    
     @classmethod
     def get_base_url(cls):
         if cls.base_url:
             return cls.base_url
+        
+    @classmethod
+    def get_use_redis(cls):
+        if cls.use_redis:
+            return cls.use_redis
         

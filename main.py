@@ -289,11 +289,19 @@ class Writer:
 
 class WebscrapperManager:
     def __init__(self):
-        self.redis_manager = RedisManager("redis", 6379)
+        if Config.use_redis:
+            self.redis_manager = RedisManager("redis", 6379)
+        else:
+            self.redis_manager = None
+        
         self.pdf_generator = PDFGenerator()
 
     def retrieve_request(self, name):
-        value = self.redis_manager.retrive(name)
+        if self.redis_manager != None:
+            value = self.redis_manager.retrive(name)
+        else:
+            value = None
+        
         if value == None:
             bytes = self.pdf_generator.generate_pdf(author_name=name)
             if bytes == None:
@@ -301,7 +309,8 @@ class WebscrapperManager:
                 return
             encoded = base64.b64encode(bytes)
 
-            self.redis_manager.insert_if_not_exists(name, encoded)
+            if self.redis_manager != None:
+                self.redis_manager.insert_if_not_exists(name, encoded)
         else:
             print("cached")
             bytes = base64.b64decode(value)

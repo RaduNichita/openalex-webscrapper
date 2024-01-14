@@ -7,7 +7,7 @@ import redis
 
 from config.config import Config
 
-from flask import Flask, make_response
+from flask import Flask, make_response, request, jsonify
 
 app = Flask(__name__)
 cfg = Config.instance()
@@ -316,14 +316,25 @@ def initialize_config():
 #     initialize_config()
 
 webManager = WebscrapperManager()
-@app.route("/report.pdf")
+@app.route("/report.pdf", methods=['GET'])
 def get_pdf():
-    bytes_pdf = webManager.retrieve_request("catalin gosman")
-    
-    response = make_response(bytes_pdf)
-    response.headers.set('Content-Type', 'application/pdf')
-    response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
-    return response
+    try:
+        json_data = request.json  
+        if json_data:
+            # Accessing individual parameters from the JSON data
+            author_name = json_data.get('author_name')
+            if author_name == None:
+                return jsonify({'error': 'No JSON data provided'})
+
+            bytes_pdf = webManager.retrieve_request(author_name)
+            response = make_response(bytes_pdf)
+            response.headers.set('Content-Type', 'application/pdf')
+            response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
+            return response       
+        else:
+            return jsonify({'error': 'No JSON data provided'})
+    except Exception as e:
+        return jsonify({'error': f'Error: {str(e)}'})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

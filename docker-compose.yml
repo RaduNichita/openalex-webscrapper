@@ -11,10 +11,9 @@ services:
       - "5000:5000"
     depends_on:
       - redis
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-
+    networks:
+      - main_network
+    
   portainer:
     image: portainer/portainer-ce
     ports:
@@ -22,3 +21,36 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: -H unix:///var/run/docker.sock
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: webscrapper-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - "9090:9090"
+    depends_on:
+      - flask-app
+    networks:
+      - main_network
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    container_name: webscrapper-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning/
+    env_file:
+      - ./env/config.monitoring
+    depends_on:
+      - prometheus
+    networks:
+      - main_network
+
+networks:
+  main_network:

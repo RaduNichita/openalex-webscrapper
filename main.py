@@ -4,13 +4,19 @@ from http import HTTPStatus
 import headless_pdfkit
 import base64
 import redis
+import logging
 
 from config.config import Config
 
 from flask import Flask, make_response, request, jsonify
+from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
 cfg = Config.instance()
+
+logging.basicConfig(level=logging.INFO)
+logging.info("Setting LOGLEVEL to INFO")
 
 class RedisManager:
     def __init__(self, host, port):
@@ -321,10 +327,8 @@ class WebscrapperManager:
 def initialize_config():
     print(Config.get_base_url())
 
-# def main():
-#     initialize_config()
-
 webManager = WebscrapperManager()
+
 @app.route("/report.pdf", methods=['GET'])
 def get_pdf():
     try:
@@ -347,4 +351,3 @@ def get_pdf():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-    # main()

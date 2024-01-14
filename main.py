@@ -289,7 +289,7 @@ class Writer:
 
 class WebscrapperManager:
     def __init__(self):
-        self.redis_manager = RedisManager("localhost", 6379)
+        self.redis_manager = RedisManager("redis", 6379)
         self.pdf_generator = PDFGenerator()
 
     def retrieve_request(self, name):

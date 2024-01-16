@@ -1,10 +1,10 @@
 name: Build and Publish Docker Image
 
 on:
-  push:
-    branches:
-      - main
-
+ push:
+  paths:
+  - '**.py'
+  
 jobs:
   build:
     runs-on: ubuntu-latest

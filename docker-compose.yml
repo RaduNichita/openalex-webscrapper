@@ -15,7 +15,7 @@ services:
           - node.role != manager
 
   flask-app:
-    image: flask-app
+    image: "radunichita/ssi-project:latest"
     build:
       context: .
       dockerfile: Dockerfile

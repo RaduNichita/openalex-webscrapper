@@ -6,6 +6,8 @@ services:
       - "6379:6379"
     networks:
       - main_network
+    deploy:
+      replicas : 2
 
   flask-app:
     build: .
@@ -13,6 +15,8 @@ services:
       - "5000:5000"
     depends_on:
       - redis
+    deploy:
+      replicas : 2
     networks:
       - main_network
     

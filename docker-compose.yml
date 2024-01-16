@@ -10,7 +10,10 @@ services:
       replicas : 2
 
   flask-app:
-    build: .
+    image: flask-app
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"
     depends_on:

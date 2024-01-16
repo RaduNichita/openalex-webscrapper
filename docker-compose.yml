@@ -8,6 +8,8 @@ services:
       - main_network
     deploy:
       replicas : 2
+      placement:
+            max_replicas_per_node: 1
 
   flask-app:
     image: flask-app
@@ -20,6 +22,8 @@ services:
       - redis
     deploy:
       replicas : 2
+      placement:
+            max_replicas_per_node: 1
     networks:
       - main_network
     

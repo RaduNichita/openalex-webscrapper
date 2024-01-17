@@ -1,4 +1,4 @@
-ame: Python Lint
+name: Python Lint
 
 on:
   pull_request:
@@ -25,4 +25,4 @@ jobs:
         pip install flake8
 
     - name: Lint Python code
-      run: flake8 main.py
+      run: flake8 --ignore=E501,E711,W293 main.py

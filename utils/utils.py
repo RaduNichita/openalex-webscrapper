@@ -11,8 +11,16 @@ from prometheus_flask_exporter import PrometheusMetrics
 
 from flask import Flask, make_response, request, jsonify
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
+
+limiter = Limiter(get_remote_address, app=app, default_limits=[
+                  "200000 per day", "18000 per hour, 600 per minute"])
+
+
 
 class RedisManager:
     def __init__(self, host, port):
@@ -332,7 +340,16 @@ def initialize_config():
 
 webManager = WebscrapperManager()
 
+def extract_author(r):
+    try:
+        return r.json.get("author_name")
+    except:
+        return "Nil author"
 
+by_name = metrics.counter('author_name_requests', 'Number of requests with author_name', labels={'author_name': lambda r : extract_author(r)})
+
+@limiter.limit("20 per minute")
+@by_name
 @app.route("/report.pdf", methods=['GET'])
 def get_pdf():
     try:
@@ -353,8 +370,7 @@ def get_pdf():
             response.headers.set('Content-Type', 'application/pdf')
             response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
 
-            task_slot = os.environ.get('TASK_SLOT', '')
-            metrics.register_default(metrics.counter(f'author_name_requests{task_slot}', 'Number of requests with author_name', labels={'author_name': author_name}))
+            metrics.register_default()
             return response
         else:
             app.logger.error('No JSON data provided')

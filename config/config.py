@@ -9,6 +9,8 @@ def get_config_path():
 
 class Config:
     _instance = None
+    use_redis = False
+    
     def __init__(self):  
         return 
     

@@ -1,9 +1,6 @@
 import logging
 
-from config.config import Config
-
 from utils.utils import *
-
 
 logging.basicConfig(level=logging.INFO)
 logging.info("Setting LOGLEVEL to INFO")

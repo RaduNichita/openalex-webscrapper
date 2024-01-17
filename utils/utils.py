@@ -315,7 +315,6 @@ class WebscrapperManager:
         if self.redis_manager != None:
             value = self.redis_manager.retrive(name)
         else:
-            app.logger.info('Redis is missing')
             value = None
 
         if value is None:
@@ -359,12 +358,12 @@ def get_pdf():
             author_name = json_data.get('author_name')
             if author_name is None:
                 app.logger.error('No author_name provided in JSON data')
-                return jsonify({'error': 'No JSON data provided'})
+                return jsonify({'error': 'No JSON data provided'}), HTTPStatus.BAD_REQUEST
 
             bytes_pdf = webManager.retrieve_request(author_name)
             if bytes_pdf is None:
                 app.logger.error('Could not generate PDF for author: %s', author_name)
-                return jsonify({'error': 'Could not generate PDF'})
+                return jsonify({'error': 'Could not generate PDF'}), HTTPStatus.INTERNAL_SERVER_ERROR
 
             response = make_response(bytes_pdf)
             response.headers.set('Content-Type', 'application/pdf')

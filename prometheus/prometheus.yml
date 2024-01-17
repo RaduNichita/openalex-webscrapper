@@ -13,7 +13,7 @@ scrape_configs:
     # metrics_path defaults to '/metrics'
     # scheme defaults to 'http'.
     static_configs:
-    - targets: ['webscrapper-prometheus:9090']
+    - targets: ['prometheus:9090']
     
   - job_name: 'flask-app'
     scrape_interval: 5s

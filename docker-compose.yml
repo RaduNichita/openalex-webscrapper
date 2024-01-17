@@ -20,6 +20,8 @@ services:
       - "5000:5000"
     depends_on:
       - redis
+    environment:
+      - TASK_SLOT={{.Task.Slot}}
     deploy:
       replicas : 2
       placement:

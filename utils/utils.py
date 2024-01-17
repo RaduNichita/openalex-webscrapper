@@ -4,6 +4,7 @@ from http import HTTPStatus
 import headless_pdfkit
 import base64
 import redis
+import os
 
 from config.config import Config
 from prometheus_flask_exporter import PrometheusMetrics
@@ -333,7 +334,6 @@ webManager = WebscrapperManager()
 
 
 @app.route("/report.pdf", methods=['GET'])
-@metri
 def get_pdf():
     try:
         json_data = request.json
@@ -353,7 +353,8 @@ def get_pdf():
             response.headers.set('Content-Type', 'application/pdf')
             response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
 
-            metrics.register_default(metrics.counter('author_name_requests', 'Number of requests with author_name', labels={'author_name': author_name}))
+            task_slot = os.environ.get('TASK_SLOT', '')
+            metrics.register_default(metrics.counter(f'author_name_requests{task_slot}', 'Number of requests with author_name', labels={'author_name': author_name}))
             return response
         else:
             app.logger.error('No JSON data provided')

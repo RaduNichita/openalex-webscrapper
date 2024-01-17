@@ -6,10 +6,12 @@ import base64
 import redis
 
 from config.config import Config
+from prometheus_flask_exporter import PrometheusMetrics
 
 from flask import Flask, make_response, request, jsonify
 
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
 
 class RedisManager:
     def __init__(self, host, port):
@@ -304,19 +306,20 @@ class WebscrapperManager:
         if self.redis_manager != None:
             value = self.redis_manager.retrive(name)
         else:
+            app.logger.info('Redis is missing')
             value = None
 
         if value is None:
             bytes = self.pdf_generator.generate_pdf(author_name=name)
             if bytes is None:
-                print("Could not generate pdf")
+                app.logger.info('Could not generate pdf')
                 return
             encoded = base64.b64encode(bytes)
 
             if self.redis_manager != None:
                 self.redis_manager.insert_if_not_exists(name, encoded)
         else:
-            print("cached")
+            app.logger.info('Content was cached')
             bytes = base64.b64decode(value)
 
         return bytes
@@ -337,15 +340,23 @@ def get_pdf():
             # Accessing individual parameters from the JSON data
             author_name = json_data.get('author_name')
             if author_name is None:
+                app.logger.error('No author_name provided in JSON data')
                 return jsonify({'error': 'No JSON data provided'})
 
             bytes_pdf = webManager.retrieve_request(author_name)
+            if bytes_pdf is None:
+                app.logger.error('Could not generate PDF for author: %s', author_name)
+                return jsonify({'error': 'Could not generate PDF'})
+
             response = make_response(bytes_pdf)
             response.headers.set('Content-Type', 'application/pdf')
-            response.headers.set('Content-Disposition',
-                                 'inline', filename='report.pdf')
+            response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
+
+            metrics.counter('author_name_requests', 'Number of requests with author_name', labels={'author_name': author_name})
             return response
         else:
+            app.logger.error('No JSON data provided')
             return jsonify({'error': 'No JSON data provided'})
     except Exception as e:
+        app.logger.error('Error occurred: %s', str(e))
         return jsonify({'error': f'Error: {str(e)}'})

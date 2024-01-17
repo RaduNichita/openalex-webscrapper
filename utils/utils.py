@@ -333,6 +333,7 @@ webManager = WebscrapperManager()
 
 
 @app.route("/report.pdf", methods=['GET'])
+@metri
 def get_pdf():
     try:
         json_data = request.json
@@ -352,7 +353,7 @@ def get_pdf():
             response.headers.set('Content-Type', 'application/pdf')
             response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
 
-            metrics.counter('author_name_requests', 'Number of requests with author_name', labels={'author_name': author_name})
+            metrics.register_default(metrics.counter('author_name_requests', 'Number of requests with author_name', labels={'author_name': author_name}))
             return response
         else:
             app.logger.error('No JSON data provided')

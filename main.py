@@ -11,12 +11,20 @@ from config.config import Config
 from flask import Flask, make_response, request, jsonify
 from prometheus_flask_exporter import PrometheusMetrics
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
 cfg = Config.instance()
 
+
+limiter = Limiter(get_remote_address, app=app, default_limits=[
+                  "20000 per day", "3000 per hour, 30 per minute"])
+
 logging.basicConfig(level=logging.INFO)
 logging.info("Setting LOGLEVEL to INFO")
+
 
 class RedisManager:
     def __init__(self, host, port):
@@ -31,10 +39,10 @@ class RedisManager:
     def retrive(self, name):
         if self.r == None:
             return None
-        
+
         val = self.r.get(name)
         return val
-    
+
     def insert_if_not_exists(self, key, val):
         if not self.r.exists(key):
             self.r.set(key, val)
@@ -46,11 +54,13 @@ class Statistics:
         self.citations = citations
         self.relevance_score = relevance_score
 
+
 class Article:
-   def __init__(self, name, year, url):
-       self.title = name
-       self.year = year
-       self.url = url
+    def __init__(self, name, year, url):
+        self.title = name
+        self.year = year
+        self.url = url
+
 
 class Institution:
     def __init__(self, name, years, country):
@@ -64,7 +74,7 @@ class Institution:
 
         if len(years_sorted) == 0:
             return []
-        
+
         start_year = years_sorted[0]
         current_year = years_sorted[0]
         for i in range(1, len(years_sorted)):
@@ -78,10 +88,11 @@ class Institution:
 
         years_intervals.append([start_year, current_year])
         return years_intervals
-    
+
     def get_intervals_format(self):
         years_intervals = self.get_intervals()
         return ", ".join(map(lambda x: f"{x[0]} - {x[1]}" if x[0] != x[1] else f"{x[0]}", years_intervals))
+
 
 class PDFGenerator:
     def __init__(self):
@@ -93,9 +104,10 @@ class PDFGenerator:
     def get_institutions_from_author(self, data):
         institutions = []
         for item in data:
-                institutions.append(Institution(item["institution"]["display_name"], item["years"], "RO"))
+            institutions.append(Institution(
+                item["institution"]["display_name"], item["years"], "RO"))
         return institutions
-    
+
     def get_articles_from_author(self, base_url):
         count = 0
         page = 1
@@ -106,7 +118,7 @@ class PDFGenerator:
             response = requests.get(url)
             if response.status_code != HTTPStatus.OK:
                 return
-            
+
             response_json = response.json()
 
             for item in response_json["results"]:
@@ -121,17 +133,16 @@ class PDFGenerator:
                         url = None
 
                     articles.append(Article(title, publication_year, url))
-            
+
             count += len(response_json["results"])
             if count == response_json["meta"]["count"]:
                 break
             page += 1
-        
+
             url = f"{base_url}&page={page}"
-        
 
         return articles
-    
+
     def search_author(self, author_name):
         author_encoded = urllib.parse.quote(author_name)
         baseUrl = f"https://api.openalex.org/authors?filter=display_name.search:{author_encoded}"
@@ -142,13 +153,14 @@ class PDFGenerator:
 
             if metadata["count"] < 1:
                 return
-            
+
             result = response_json["results"][0]
             author_name = result["display_name"]
 
             articles = self.get_articles_from_author(result["works_api_url"])
 
-            institutions = self.get_institutions_from_author(result["affiliations"])    
+            institutions = self.get_institutions_from_author(
+                result["affiliations"])
 
             article_set = []
             article_names = set()
@@ -156,7 +168,7 @@ class PDFGenerator:
                 title_formated = ""
                 for letter in article.title:
                     if (letter >= 'a' and letter <= 'z') or (letter >= 'A' and letter <= 'Z') or (letter >= '0' and letter <= '9'):
-                        title_formated += letter 
+                        title_formated += letter
                 title_formated = title_formated.upper().replace(" ", "")
                 if title_formated in article_names:
                     continue
@@ -164,7 +176,7 @@ class PDFGenerator:
                 article_set.append(article)
 
             articles = article_set
-            articles.sort(key= lambda article : article.year, reverse=True)
+            articles.sort(key=lambda article: article.year, reverse=True)
 
             statistics = self.get_statistics(result)
 
@@ -247,13 +259,14 @@ class PDFGenerator:
 
             if metadata["count"] < 1:
                 return
-            
+
             result = response_json["results"][0]
             author_name = result["display_name"]
 
             articles = self.get_articles_from_author(result["works_api_url"])
 
-            institutions = self.get_institutions_from_author(result["affiliations"])    
+            institutions = self.get_institutions_from_author(
+                result["affiliations"])
 
             article_set = []
             article_names = set()
@@ -261,7 +274,7 @@ class PDFGenerator:
                 title_formated = ""
                 for letter in article.title:
                     if (letter >= 'a' and letter <= 'z') or (letter >= 'A' and letter <= 'Z') or (letter >= '0' and letter <= '9'):
-                        title_formated += letter 
+                        title_formated += letter
                 title_formated = title_formated.upper().replace(" ", "")
                 if title_formated in article_names:
                     continue
@@ -269,7 +282,7 @@ class PDFGenerator:
                 article_set.append(article)
 
             articles = article_set
-            articles.sort(key= lambda article : article.year, reverse=True)
+            articles.sort(key=lambda article: article.year, reverse=True)
 
             statistics = self.get_statistics(result)
 
@@ -289,9 +302,10 @@ class Writer:
     def __init__(self):
         pass
 
-    def write(filename : str, bytes : bytearray) :
+    def write(filename: str, bytes: bytearray):
         with open(filename, 'wb') as w:
             w.write(bytes)
+
 
 class WebscrapperManager:
     def __init__(self):
@@ -299,7 +313,7 @@ class WebscrapperManager:
             self.redis_manager = RedisManager("redis", 6379)
         else:
             self.redis_manager = None
-        
+
         self.pdf_generator = PDFGenerator()
 
     def retrieve_request(self, name):
@@ -307,7 +321,7 @@ class WebscrapperManager:
             value = self.redis_manager.retrive(name)
         else:
             value = None
-        
+
         if value == None:
             bytes = self.pdf_generator.generate_pdf(author_name=name)
             if bytes == None:
@@ -322,17 +336,19 @@ class WebscrapperManager:
             bytes = base64.b64decode(value)
 
         return bytes
-           
+
 
 def initialize_config():
     print(Config.get_base_url())
 
+
 webManager = WebscrapperManager()
+
 
 @app.route("/report.pdf", methods=['GET'])
 def get_pdf():
     try:
-        json_data = request.json  
+        json_data = request.json
         if json_data:
             # Accessing individual parameters from the JSON data
             author_name = json_data.get('author_name')
@@ -342,12 +358,14 @@ def get_pdf():
             bytes_pdf = webManager.retrieve_request(author_name)
             response = make_response(bytes_pdf)
             response.headers.set('Content-Type', 'application/pdf')
-            response.headers.set('Content-Disposition', 'inline', filename='report.pdf')
-            return response       
+            response.headers.set('Content-Disposition',
+                                 'inline', filename='report.pdf')
+            return response
         else:
             return jsonify({'error': 'No JSON data provided'})
     except Exception as e:
         return jsonify({'error': f'Error: {str(e)}'})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

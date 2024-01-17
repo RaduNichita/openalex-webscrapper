@@ -65,6 +65,7 @@ services:
       - "3000:3000"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning/
+      - ./dashboards:/var/lib/grafana/dashboards
     env_file:
       - ./env/config.monitoring
     depends_on:
